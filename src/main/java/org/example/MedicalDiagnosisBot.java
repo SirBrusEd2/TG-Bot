@@ -243,12 +243,12 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
 
     @Override
     public String getBotUsername() {
-        return "MedicalDiagnosisBot";
+        return "Patient_condition_bot";
     }
 
     @Override
     public String getBotToken() {
-        return "7599633503:AAGZ6N_MRq1a7fH8ay9VkFdZU43Rw8lSAi4";
+        return "7118289957:AAF7sOeJQcsefUPJnOoWA2QlB2pI8GVbZX8";
     }
 }
 
