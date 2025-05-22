@@ -1,0 +1,68 @@
+@startuml
+
+class org.example.Main {
+  + static void main(String[])
+}
+
+class org.example.bot.MedicalDiagnosisBot {
+  - Map<String, DiagnosisSession> userSessions
+  - List<DiagnosticTest> availableTests
+  + void onUpdateReceived(Update)
+}
+
+class org.example.model.DiagnosisSession {
+  - DiagnosticTest currentTest
+  + String getDiagnosisResult()
+}
+
+class org.example.model.DiagnosticTest {
+  - List<DiagnosticQuestion> questions
+  + String evaluateDiagnosis(int)
+}
+
+class org.example.model.DiagnosticQuestion {
+  - String questionText
+  + String getPossibleAnswers()
+}
+
+class org.example.service.TestConfigLoader {
+  + static List<DiagnosticTest> loadTests()
+}
+
+class "org.telegram.telegrambots.meta.TelegramBotsApi" {
+  __Telegram API__
+}
+
+class "com.fasterxml.jackson.databind.ObjectMapper" {
+  __Jackson JSON__
+}
+
+' Наследование
+org.telegram.telegrambots.bots.TelegramLongPollingBot <|-- org.example.bot.MedicalDiagnosisBot
+
+' Корректные зависимости (теперь все идут В Main)
+org.example.Main --> "org.telegram.telegrambots.meta.TelegramBotsApi" : creates
+org.example.Main --> org.example.bot.MedicalDiagnosisBot : launches
+
+' Внутренние связи между компонентами
+org.example.bot.MedicalDiagnosisBot --> org.example.service.TestConfigLoader : uses
+org.example.bot.MedicalDiagnosisBot --> org.example.model.DiagnosisSession : creates
+org.example.service.TestConfigLoader --> org.example.model.DiagnosticTest : creates
+org.example.service.TestConfigLoader --> "com.fasterxml.jackson.databind.ObjectMapper" : uses
+org.example.model.DiagnosisSession --> org.example.model.DiagnosticTest : uses
+org.example.model.DiagnosticTest --> org.example.model.DiagnosticQuestion : contains
+
+' Стили классов (сохраняем из предыдущей версии)
+class org.example.bot.MedicalDiagnosisBot #FFE4B5
+class org.example.model.DiagnosisSession #D8BFD8
+class org.example.model.DiagnosticQuestion #E6E6FA
+class org.example.model.DiagnosticTest #B0E0E6
+class org.example.service.TestConfigLoader #98FB98
+class org.example.Main #FFD700
+
+note right of org.example.Main
+  Точка входа приложения.
+  Создает и запускает все компоненты.
+end note
+
+@enduml

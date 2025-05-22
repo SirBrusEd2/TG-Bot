@@ -1,5 +1,9 @@
-package org.example;
+package org.example.bot;
 
+import org.example.service.TestConfigLoader;
+import org.example.model.DiagnosisSession;
+import org.example.model.DiagnosticQuestion;
+import org.example.model.DiagnosticTest;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -7,8 +11,18 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.stream.Collectors;
 
+/**
+ * Telegram-бот для медицинской диагностики по шкалам APACHE II/III.
+ * <p>
+ * Основные функции:
+ * <ul>
+ *     <li>Проведение диагностических тестов</li>
+ *     <li>Управление сессиями диагностики для разных пользователей</li>
+ *     <li>Оценка тяжести состояния и риска летальности</li>
+ *     <li>Интерактивный опрос пользователей</li>
+ * </ul>
+ */
 public class MedicalDiagnosisBot extends TelegramLongPollingBot {
     private final Map<String, DiagnosisSession> userSessions = new HashMap<>();
     private final List<DiagnosticTest> availableTests;
@@ -17,6 +31,11 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
             "/apacheiii", "APACHE III (Acute Physiology And Chronic Health Evaluation III)"
     );
 
+    /**
+     * Конструктор бота. Загружает доступные тесты из конфигурации.
+     * <p>
+     * При ошибке загрузки тестов инициализирует пустой список тестов.
+     */
     public MedicalDiagnosisBot() {
         List<DiagnosticTest> loadedTests;
         try {
@@ -29,7 +48,13 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         this.availableTests = loadedTests;
     }
 
-
+    /**
+     * Обрабатывает входящие обновления от Telegram.
+     *
+     * @param update объект Update от Telegram API
+     *
+     * <p>Фильтрует сообщения без текста и делегирует обработку методу processMessage.
+     */
     @Override
     public void onUpdateReceived(Update update) {
         if (!update.hasMessage() || !update.getMessage().hasText()) return;
@@ -45,6 +70,13 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         }
     }
 
+    /**
+     * Определяет тип сообщения и вызывает соответствующий обработчик.
+     *
+     * @param chatId идентификатор чата
+     * @param message текст сообщения пользователя
+     * @return подготовленное сообщение для отправки
+     */
     private SendMessage processMessage(String chatId, String message) {
         if (message.startsWith("/start")) {
             return startCommand(chatId);
@@ -58,6 +90,12 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         }
     }
 
+    /**
+     * Обрабатывает команду /start - выводит список доступных тестов.
+     *
+     * @param chatId идентификатор чата
+     * @return сообщение с приветствием и списком команд
+     */
     private SendMessage startCommand(String chatId) {
         StringBuilder messageText = new StringBuilder("Добро пожаловать в медицинский диагностический бот!\n\nДоступные тесты:\n");
         testCommands.forEach((cmd, name) -> messageText.append(cmd).append(" - ").append(name).append("\n"));
@@ -66,6 +104,13 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         return createMessage(chatId, messageText.toString());
     }
 
+    /**
+     * Начинает новый диагностический тест.
+     *
+     * @param chatId идентификатор чата
+     * @param testName название теста
+     * @return первый вопрос теста или сообщение об ошибке
+     */
     private SendMessage startTest(String chatId, String testName) {
         DiagnosticTest test = availableTests.stream()
                 .filter(t -> t.getTestName().equals(testName))
@@ -82,6 +127,13 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         return askNextQuestion(chatId, session);
     }
 
+    /**
+     * Формирует следующий вопрос теста с учетом логики пропуска вопросов.
+     *
+     * @param chatId идентификатор чата
+     * @param session текущая сессия диагностики
+     * @return сообщение с вопросом или сообщение об ошибке
+     */
     private SendMessage askNextQuestion(String chatId, DiagnosisSession session) {
         DiagnosticQuestion nextQuestion;
         do {
@@ -90,7 +142,6 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
                 return createMessage(chatId, "Ошибка: нет вопросов в тесте");
             }
 
-            // Пропускаем вопросы, которые не должны задаваться
             if (shouldSkipQuestion(session, nextQuestion)) {
                 session.recordAnswer(nextQuestion.getParameterName(), 0);
                 continue;
@@ -112,15 +163,20 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         return createMessage(chatId, messageText.toString());
     }
 
+    /**
+     * Определяет, нужно ли пропустить вопрос на основе предыдущих ответов.
+     *
+     * @param session текущая сессия диагностики
+     * @param question проверяемый вопрос
+     * @return true если вопрос следует пропустить, иначе false
+     */
     private boolean shouldSkipQuestion(DiagnosisSession session, DiagnosticQuestion question) {
         Integer isVentilated = session.getAnswerFor("is_ventilated");
 
-        // Пропускаем A-aDO2 если пациент не на ИВЛ
         if (question.getParameterName().equals("aado2") && (isVentilated == null || isVentilated == 0)) {
             return true;
         }
 
-        // Пропускаем PaO2 если пациент на ИВЛ
         if (question.getParameterName().equals("pao2") && isVentilated != null && isVentilated == 1) {
             return true;
         }
@@ -128,6 +184,12 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         return false;
     }
 
+    /**
+     * Добавляет подсказки для специфических параметров.
+     *
+     * @param messageText строитель текста сообщения
+     * @param parameterName название параметра
+     */
     private void addParameterHints(StringBuilder messageText, String parameterName) {
         switch (parameterName) {
             case "map":
@@ -145,6 +207,13 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         }
     }
 
+    /**
+     * Обрабатывает ответ пользователя на вопрос теста.
+     *
+     * @param chatId идентификатор чата
+     * @param message текст ответа пользователя
+     * @return следующий вопрос или результаты теста
+     */
     private SendMessage handleUserResponse(String chatId, String message) {
         DiagnosisSession session = userSessions.get(chatId);
         if (session == null) {
@@ -157,13 +226,11 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
                 return createMessage(chatId, "Ошибка: вопрос не найден");
             }
 
-            // Обработка вопроса про ИВЛ
             if (currentQuestion.getParameterName().equals("respiratory_rate") &&
                     !session.hasAnswerFor("is_ventilated")) {
                 return handleVentilationQuestion(chatId, session, message);
             }
 
-            // Стандартная обработка вопроса
             List<String> possibleAnswers = currentQuestion.getPossibleAnswers();
             int answerIndex = Integer.parseInt(message) - 1;
 
@@ -181,6 +248,9 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         }
     }
 
+    /**
+     * Специальная обработка вопроса об ИВЛ.
+     */
     private SendMessage handleVentilationQuestion(String chatId, DiagnosisSession session, String message) {
         if (message.equalsIgnoreCase("да") || message.equalsIgnoreCase("нет")) {
             boolean isVentilated = message.equalsIgnoreCase("да");
@@ -191,6 +261,9 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         }
     }
 
+    /**
+     * Проверяет завершение теста и возвращает результаты или следующий вопрос.
+     */
     private SendMessage checkTestCompletion(String chatId, DiagnosisSession session) {
         if (session.isComplete()) {
             int totalScore = session.calculateTotalScore();
@@ -203,6 +276,9 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         return askNextQuestion(chatId, session);
     }
 
+    /**
+     * Форматирует результаты теста для вывода пользователю.
+     */
     private String formatTestResults(int score, String diagnosis, String mortalityRisk) {
         return "Диагностика завершена.\n\n" +
                 "Общий балл: " + score + "\n" +
@@ -211,6 +287,9 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
                 "Для нового теста используйте /apacheii или /apacheiii";
     }
 
+    /**
+     * Оценивает риск летальности на основе баллов и типа теста.
+     */
     private String estimateMortalityRisk(int score, String testName) {
         if (testName.equals("APACHE II (Acute Physiology And Chronic Health Evaluation II)")) {
             if (score < 10) return "~15%";
@@ -229,11 +308,17 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         return "Неизвестно";
     }
 
+    /**
+     * Отменяет текущую сессию тестирования.
+     */
     private SendMessage cancelSession(String chatId) {
         userSessions.remove(chatId);
         return createMessage(chatId, "Тест отменен. Для начала нового теста используйте /apacheii или /apacheiii");
     }
 
+    /**
+     * Создает объект сообщения для отправки.
+     */
     private SendMessage createMessage(String chatId, String text) {
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
@@ -241,14 +326,19 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
         return message;
     }
 
+    /**
+     * Возвращает имя бота.
+     */
     @Override
     public String getBotUsername() {
         return "Patient_condition_bot";
     }
 
+    /**
+     * Возвращает токен бота.
+     */
     @Override
     public String getBotToken() {
         return "7118289957:AAF7sOeJQcsefUPJnOoWA2QlB2pI8GVbZX8";
     }
 }
-
