@@ -36,3 +36,6 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+# Конфигурационные файлы с секретными данными
+config.properties

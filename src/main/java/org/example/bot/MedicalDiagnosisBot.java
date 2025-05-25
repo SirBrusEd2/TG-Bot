@@ -10,6 +10,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
 
 /**
@@ -339,6 +340,15 @@ public class MedicalDiagnosisBot extends TelegramLongPollingBot {
      */
     @Override
     public String getBotToken() {
-        return "7118289957:AAF7sOeJQcsefUPJnOoWA2QlB2pI8GVbZX8";
+        try (InputStream input = getClass().getResourceAsStream("/config.properties")) {
+            Properties prop = new Properties();
+            if (input == null) {
+                throw new IllegalStateException("Конфигурационный файл не найден!");
+            }
+            prop.load(input);
+            return prop.getProperty("bot.token");
+        } catch (IOException e) {
+            throw new RuntimeException("Ошибка загрузки токена", e);
+        }
     }
 }
